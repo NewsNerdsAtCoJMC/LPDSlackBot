@@ -202,7 +202,7 @@ def parse_slack_output(slack_rtm_output):
     return None, None
 
 #----CREATING THE TUNNEL----#
-#This is called when the file is run from the terminal.
+#This is called when the file is run from the terminal. YOU SHOULDN'T NEED TO CHANGE ANYTHING.
 #It tries to connect to the slack client. If it fails, it prints a failure message.
 if __name__ == "__main__":
     #This is how long the loop waits between checking for new messages.
@@ -210,7 +210,7 @@ if __name__ == "__main__":
     if slack_client.rtm_connect():
         #Once the connection is successful, it starts a loop to constantly check for new messages.
         #It sends anything it finds to the parse_slack_output function.
-        #If it receives a response from the parse_slack_output function, it sends those resopnses to the handle_command function.
+        #If it receives a response from the parse_slack_output function, it sends those responses to the handle_command function.
         print("Bot connected and running!")
         while True:
             command, channel = parse_slack_output(slack_client.rtm_read())
