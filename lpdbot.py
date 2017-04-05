@@ -159,58 +159,51 @@ def object_id_search(command):
     response = sql_query(query)
     return response
 
-def latest_incident(command):
-    now = datetime.now()
-    hour = timedelta(hours=1)
-    url = "https://opendata.arcgis.com/datasets/b7d2a21a15f8427db62cfd09f821856a_0.csv"
-    global incident_update
-    global incident_csv
-    if now - incident_update > hour:
-        r = requests.get(url)
-        data = r.text
-        incident_csv = data
-        incident_update = now
-        print("Got new information.")
-    incident_lines = incident_csv.split('\n')
-    latest = incident_lines[1]
-    row = latest.split(',')
-    report_datetext = "{0}T{1}".format(row[10], row[12])
-    report_datetime = datetime.strptime(report_datetext, "%Y%m%dT%H%M")
-    from_datetext = "{0}T{1}".format(row[13], row[15])
-    from_datetime = datetime.strptime(report_datetext, "%Y%m%dT%H%M")
-    #This turns it into human-readable text.
-    report_humantext = report_datetime.strftime("%b. %-d, %Y, %-I:%M %p")
-    from_humantext = from_datetime.strftime("%b. %-d, %Y, %-I:%M %p")
-    #These get other information from the entry and title case them.
-    block = row[5].title()
-    category = row[7].title()
-    officer = row[19].title()
-    case_number = row[21]
-    #If the entry has elements in the first and second fields, this assumes they are the latitude and longitude.
-    if row[0] and row[1]:
-        #This creates a Google Maps link using the latitude and longitude from the entry
-        map_link = "http://maps.google.com/maps?z=12&t=h&q=loc:{1}+{0} ".format(row[0], row[1])
-        response = "{0}: {1}. {2}. Responding officer: {3}. {4}".format(report_humantext, category, block, officer, map_link)
-    #If the first and second elements are null, it creates a response without the link.
-    else:
-        response = "{0}: {1}. {2}. Responding officer: {3}.".format(report_humantext, category, block, officer)
+def total_incidents_since_date(command):
+    datetext = command[:-11]
+    year = datetext[:4]
+    month = datetext[5:7]
+    day = datetext[8:]
+    query = "SELECT COUNT(*) FROM incidents WHERE Rpt_Date >= {0}{1}{2}".format(year, month, day)
+    response = sql_query(query)
     return response
 
-def call_type():
-    response = "This is the CALL_TYPE function. You can ask for this, that, or even that."
+def total_incidents_by_type_since_date(command):
+    datetext = command[-10:]
+    crime_type = command[10:-27]
+    year = datetext[:4]
+    month = datetext[5:7]
+    day = datetext[8:]
+    query = "SELECT COUNT(*) FROM incidents WHERE Rpt_Date >= {0}{1}{2} AND CVLEGEND == '{3}'".format(year, month, day, crime_type.upper())
+    response = sql_query(query)
     return response
-def team_area():
-    response = "This is the TEAM_AREA function. You can ask for this, that, or even that."
+
+def total_incidents_between_dates(command):
+    datetext1 = command[28:38]
+    year1 = datetext1[:4]
+    month1 = datetext1[5:7]
+    day1 = datetext1[8:]
+    datetext2 = command[-10:]
+    year2 = datetext2[:4]
+    month2 = datetext2[5:7]
+    day2 = datetext2[8:]
+    query = "SELECT COUNT(*) FROM incidents WHERE Rpt_Date >= {0}{1}{2} AND Rpt_Date <= {3}{4}{5}".format(year1, month1, day1, year2, month2, day2)
+    response = sql_query(query)
     return response
-def date_func():
-    response = "This is the DATE function. You can ask for this, that, or even that."
-    return response
-def time_func():
-    response = "This is the TIME function. You can ask for this, that, or even that."
-    return response
-def officer_func():
-    response = "This is the OFFICER function. You can ask for this, that, or even that."
-    return response
+
+def average_incidents_per_month():
+    today = datetime.now()
+    start = datetime(2016, 1, 1, 0, 0, 0, 0)
+    change = today-start
+    days = change.days
+    months = days//30
+    today_month = str(today.month)
+    if len(today_month) == 1:
+        today_month = '0' + today_month
+    query = "SELECT COUNT(*) FROM incidents WHERE Rpt_Date < {0}{1}01".format(today.year, today_month)
+    count = sql_query(query)
+    average = count / (months-1)
+    return average
 
 #----COMMAND HANDLING----#
 #This function parses the message and figures out how to respond.
@@ -237,16 +230,20 @@ def handle_command(command, channel):
         response = object_id_search(command)
     elif command == LATEST:
         response = latest_incident(command)
-    elif command == "call_type":
-        response = call_type()
-    elif command == "team_area":
-        response = team_area()
-    elif command == "date":
-        response = date_func()
-    elif command == "time":
-        response = time_func()
-    elif command == "officer":
-        response = officer_func()
+    elif command == "incidents":
+        response = "Here are the incidents I keep track of:\n\tArson\n\tAssault\n\tAuto Theft\n\tBurglary - All Other\n\tBurglary - Residential\n\tChild Abuse\n\tDeath\n\tForgery\n\tFraud\n\tHomicide\n\tIndecent Exposure\n\tLarceny - All Other\n\tLarceny - From Vehicle\n\tLost/Stolen\n\tMissing Adult\n\tMissing Juvenile\n\tNarcotics\n\tOther\n\tPornography\n\tProstitution	\n\tRobbery - All Other\n\tRobbery - Commercial\n\tSex Crime\n\tSuicide\n\tSuicide Attempt\n\tVandalism\n\tWeapons Offense"
+    elif command == "incidents between":
+        response = "List the oldest date first and the most recent date second. For example: Number of incidents between 2016-01-02 and 2016-07-08."
+    elif command == "incidents since":
+        response = "Here are some formatting tips. The date has to be in YYYY-MM-DD format and time has to be in 24-hour-time. For example: 2016-05-06, 22:30."
+    elif command.startswith("number of incidents since"):
+        response = total_incidents_since_date(command)
+    elif command.startswith("number of incidents between"):
+        response = total_incidents_between_dates(command)
+    elif command.startswith("number of"):
+        response = total_incidents_by_type_since_date(command)
+    elif command == "average number of incidents per month":
+        response = average_incidents_per_month()
 
     #Finally, once a response is created, the slack_client posts it to the same channel the original message is in.
     slack_client.api_call("chat.postMessage", channel=channel, text=response, as_user=True)
