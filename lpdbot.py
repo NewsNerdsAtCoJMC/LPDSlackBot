@@ -160,7 +160,8 @@ def object_id_search(command):
     return response
 
 def total_incidents_since_date(command):
-    datetext = command[:-11]
+    datetext = command[-10:]
+    print(datetext)
     year = datetext[:4]
     month = datetext[5:7]
     day = datetext[8:]
@@ -205,6 +206,48 @@ def average_incidents_per_month():
     average = count / (months-1)
     return average
 
+def average_incidents_by_type_per_month(command):
+    crime_type = command[18:-20]
+    today = datetime.now()
+    start = datetime(2016, 1, 1, 0, 0, 0, 0)
+    change = today-start
+    days = change.days
+    months = days//30
+    today_month = str(today.month)
+    if len(today_month) == 1:
+        today_month = '0' + today_month
+    query = "SELECT COUNT(*) FROM incidents WHERE Rpt_Date < {0}{1}01 AND CVLEGEND == '{2}'".format(today.year, today_month, crime_type.upper())
+    count = sql_query(query)
+    average = count / (months-1)
+    return average
+
+def total_change_between_years(command):
+    year1 = command[-13:-9]
+    year2 = command[-4:]
+    query1 = "SELECT COUNT(*) FROM incidents WHERE Rpt_Date >= {0}0101 AND Rpt_Date < {0}9999".format(year1)
+    year1count = int(sql_query(query1))
+    query2 = "SELECT COUNT(*) FROM incidents WHERE Rpt_Date >= {0}0101 AND Rpt_Date < {0}9999".format(year2)
+    year2count = int(sql_query(query2))
+    difference = year1count-year2count
+    response = "{0}: {1}\n{2}: {3}\nDifference: {4}".format(year1, year1count, year2, year2count, difference)
+    return response
+
+def percent_change_between_years(command):
+    year1 = command[-13:-9]
+    year2 = command[-4:]
+    query1 = "SELECT COUNT(*) FROM incidents WHERE Rpt_Date >= {0}0101 AND Rpt_Date < {0}9999".format(year1)
+    year1count = int(sql_query(query1))
+    query2 = "SELECT COUNT(*) FROM incidents WHERE Rpt_Date >= {0}0101 AND Rpt_Date < {0}9999".format(year2)
+    year2count = int(sql_query(query2))
+    percent_change = ((year2count-year1count)/year1count)*100
+    response = "{0}: {1}\n{2}: {3}\nPercent change: {4}%".format(year1, year1count, year2, year2count, percent_change)
+    return response
+
+def insult_generator():
+    r = requests.get("http://insult.mattbas.org/api/insult.txt")
+    data = r.text
+    return(data)
+
 #----COMMAND HANDLING----#
 #This function parses the message and figures out how to respond.
 #That response can be a simple text message or it can call a function.
@@ -220,8 +263,8 @@ def handle_command(command, channel):
     #Each of these checks to see if the command starts with a certain phrase or word.
     if command.startswith(EXAMPLE_COMMAND):
         response = "Sure...write some more code then I can do that!"
-    elif command.startswith(GREETING):
-        response = "Hey! I’m LPD Bot, your personal expert about the Lincoln Police Department. Here’s what I can do:\nI have crime data since January 2016 so I can tell you…\n\tCrimes based on [CALL_TYPE], [TEAM_AREA], [DATE], [TIME], [OFFICER]\nType one of these individually for help, or type exactly what you want using these commands."
+    elif command.startswith(GREETING) or command.startswith("help"):
+        response = "Hey! I’m LPD Bot, your personal expert about the Lincoln Police Department.\nI have crime data since January 2016, so here are some questions you can ask me.\n```\tNumber of incidents since [YYYY-MM-DD]\n\tNumber of [type of incident] incidents since [YYYY-MM-DD]\n\tNumber of incidents between [YYYY-MM-DD] and [YYYY-MM-DD]\n\tAverage number of incidents per month\n\tAverage number of [type of incident] incidents per month\n\tChange in number of incidents between [YYYY] and [YYYY]\n\tPercent change in number of incidents between [YYYY] and [YYYY]```\n\nTo see a list of incident types, use the `incidents` command."
     elif command.startswith(FUTURE_WEATHER):
         response = get_future_weather(command)
     elif command.startswith(CURRENT_WEATHER):
@@ -244,7 +287,14 @@ def handle_command(command, channel):
         response = total_incidents_by_type_since_date(command)
     elif command == "average number of incidents per month":
         response = average_incidents_per_month()
-
+    elif command.startswith("average number of "):
+        response = average_incidents_by_type_per_month(command)
+    elif command.startswith("change in number of incidents between"):
+        response = total_change_between_years(command)
+    elif command.startswith("percent change in number of incidents between"):
+        response = percent_change_between_years(command)
+    elif command == "insult":
+        response = insult_generator()
     #Finally, once a response is created, the slack_client posts it to the same channel the original message is in.
     slack_client.api_call("chat.postMessage", channel=channel, text=response, as_user=True)
 
@@ -263,6 +313,7 @@ def parse_slack_output(slack_rtm_output):
         for output in output_list:
             if output and 'text' in output and AT_BOT in output['text']:
                 # return text after the @ mention, whitespace removed
+                print(output)
                 return output['text'].split(AT_BOT)[1].strip().lower(), output['channel']
     return None, None
 
